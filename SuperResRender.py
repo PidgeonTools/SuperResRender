@@ -1,27 +1,3 @@
-# This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful, but
-# WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTIBILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-# General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program. If not, see <http://www.gnu.org/licenses/>.
-
-bl_info = {
-    "name" : "[Pidgeon Tools] Super Resolution Render",
-    "author" : "Kevin Lorengel, Chris Bond (Kamikaze)",
-    "description" : "Render in extreme resolution!",
-    "blender" : (2, 83, 0),
-    "version" : (0, 0, 1),
-    "location" : "Properties > RenderSettings > SuperResRender",
-    "warning" : "",
-    "category" : "Render"
-}
-
 import bpy
 import time
 from bpy.types import (
@@ -136,11 +112,11 @@ def do_render_tile(context, settings: RenderTile):
     (shift_x, shift_y) = settings.shift
     filepath = settings.filepath
 
-    print('\nRendering tile:')
-    print(f'tile_x: {tile_x}, tile_y: {tile_y}')
-    print(f'Camera focal length: {f_len}mm')
+    # print('\nRendering tile:')
+    # print(f'tile_x: {tile_x}, tile_y: {tile_y}')
+    # print(f'Camera focal length: {f_len}mm')
     # print(f'offset x: {x}, offset y: {y}')
-    print(f'shift x: {shift_x}, shift_y: {shift_y}')
+    # print(f'shift x: {shift_x}, shift_y: {shift_y}')
 
     render.filepath = filepath
     # render.image_settings.file_format = 'PNG'
@@ -153,7 +129,7 @@ def do_render_tile(context, settings: RenderTile):
     cam.data.shift_y = shift_y
 
     # Render tile
-    print('Rendering tile %s ...' % filepath)
+    # print('Rendering tile %s ...' % filepath)
     bpy.ops.render.render("INVOKE_DEFAULT", write_still = True)
 
 
@@ -183,10 +159,10 @@ def generate_tiles(context, saved_settings):
     max_tile_y = ceil(res_y / tiles_per_side)
     last_tile_x = res_x - (max_tile_x * (tiles_per_side - 1))
     last_tile_y = res_y - (max_tile_y * (tiles_per_side - 1))
-    print(f'number_divisions: {number_divisions}')
-    print(f'tiles: {tiles_per_side}x{tiles_per_side} = {total_tiles} tiles')
-    print(f'tile size: {max_tile_x}x{max_tile_y}px')
-    print(f'last tile size: {last_tile_x}x{last_tile_y}px')
+    # print(f'number_divisions: {number_divisions}')
+    # print(f'tiles: {tiles_per_side}x{tiles_per_side} = {total_tiles} tiles')
+    # print(f'tile size: {max_tile_x}x{max_tile_y}px')
+    # print(f'last tile size: {last_tile_x}x{last_tile_y}px')
 
     def get_offset(col, row, tile_x, tile_y, is_last_col, is_last_row):
         offset_x = res_x - (tile_x / 2) if is_last_col else (col + 0.5) * tile_x
@@ -209,24 +185,24 @@ def generate_tiles(context, saved_settings):
             # Start a new column
             is_last_col = current_col == (tiles_per_side - 1)
 
-            print(f'row {current_row}, col {current_col}')
-            print(f'Last row? {"YES" if is_last_row else "no"} Last col? {"YES" if is_last_col else "no"}')
+            # print(f'row {current_row}, col {current_col}')
+            # print(f'Last row? {"YES" if is_last_row else "no"} Last col? {"YES" if is_last_col else "no"}')
 
             # Set Resolution (and aspect ratio)
             tile_x = last_tile_x if is_last_col else max_tile_x
             tile_y = last_tile_y if is_last_row else max_tile_y
-            print(f'tile_x: {tile_x}, tile_y: {tile_y}')
+            # print(f'tile_x: {tile_x}, tile_y: {tile_y}')
 
             # Set CameraZoom
             f_len = focal_length * res_x / tile_x if tile_x >= tile_y else focal_length * res_x / tile_y
-            print(f'Camera focal length: {f_len}mm')
+            # print(f'Camera focal length: {f_len}mm')
 
             # Set Camera Shift
             (x, y) = get_offset(current_col, current_row, tile_x, tile_y, is_last_col, is_last_row)
-            print(f'offset x: {x}, offset y: {y}')
+            # print(f'offset x: {x}, offset y: {y}')
             (shift_x, shift_y) = get_shift(x, y, tile_x, tile_y)
-            print(f'shift_x: {shift_x}')
-            print(f'shift_y: {shift_y}')
+            # print(f'shift_x: {shift_x}')
+            # print(f'shift_y: {shift_y}')
 
             # Render
             filepath = f'//PartRenders\\Part{(current_row + 1):02}R{(current_col + 1):02}C'
@@ -282,8 +258,8 @@ class SRR_OT_Render(bpy.types.Operator):
         self.saved_settings = save_render_settings(context)
 
         # Prepare tiles
-        print('\n\n--------------')
-        print('Preparing tiles...')
+        # print('\n\n--------------')
+        # print('Preparing tiles...')
         self.tiles = generate_tiles(context, self.saved_settings)
 
         # Setup callbacks
@@ -306,7 +282,7 @@ class SRR_OT_Render(bpy.types.Operator):
 
         if event.type == 'TIMER':
             if True in (not self.tiles, self.stop is True, settings.should_stop is True):
-                print('\n*** STOPPING!')
+                # print('\n*** STOPPING!')
                 # Remove callbacks & clean up
                 bpy.app.handlers.render_pre.remove(self.render_pre)
                 bpy.app.handlers.render_post.remove(self.render_post)
@@ -324,9 +300,9 @@ class SRR_OT_Render(bpy.types.Operator):
                 return {'FINISHED'}
 
             elif self.rendering is False:
-                print('\n=== Ready to render!')
+                # print('\n=== Ready to render!')
                 tile = self.tiles[0]
-                print(tile)
+                # print(tile)
 
                 do_render_tile(context, tile)
 
@@ -347,12 +323,12 @@ class SRR_OT_StopRender(bpy.types.Operator):
 # Interface
 
 class SRR_UI_PT_Panel(bpy.types.Panel):
-    bl_idname = "SRR_PT_Render_Still"
-    bl_label = "Render Frame"
-    bl_category = "SuperResRender"
+
+    bl_label = "Super Res Render Frame"
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
-    bl_context = "render"
+    bl_context = "output"
+    bl_category = "Pidgeon-Tools"
 
     def draw(self, context):
         layout = self.layout
