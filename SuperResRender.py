@@ -1,14 +1,13 @@
 import bpy
+import gc
+import os
 import time
-from bpy.types import (
-    Operator,
-    PropertyGroup,
-)
 from bpy.props import (
     BoolProperty,
     EnumProperty,
     PointerProperty,
 )
+from array import array
 from math import ceil
 from typing import NamedTuple
 
@@ -21,7 +20,7 @@ SUBDIVISION_SIZES = (
 )
 
 
-class SuperResRenderSettings(PropertyGroup):
+class SuperResRenderSettings(bpy.types.PropertyGroup):
     subdivisions: EnumProperty(
         name="Tiles",
         items=SUBDIVISION_SIZES,
@@ -46,6 +45,12 @@ class RenderTile(NamedTuple):
     dimensions: tuple
     f_len: float
     shift: tuple
+    filepath: str
+    file_format: str
+
+class MergeTile(NamedTuple):
+    dimensions: tuple
+    offset: tuple
     filepath: str
 
 class SavedRenderSettings(NamedTuple):
@@ -111,15 +116,16 @@ def do_render_tile(context, settings: RenderTile):
     # (x, y) = settings.tile_offset
     (shift_x, shift_y) = settings.shift
     filepath = settings.filepath
+    file_format = settings.file_format
 
-    # print('\nRendering tile:')
-    # print(f'tile_x: {tile_x}, tile_y: {tile_y}')
-    # print(f'Camera focal length: {f_len}mm')
-    # print(f'offset x: {x}, offset y: {y}')
-    # print(f'shift x: {shift_x}, shift_y: {shift_y}')
+    # print("\nRendering tile:")
+    # print(f"tile_x: {tile_x}, tile_y: {tile_y}")
+    # print(f"Camera focal length: {f_len}mm")
+    # print(f"offset x: {x}, offset y: {y}")
+    # print(f"shift x: {shift_x}, shift_y: {shift_y}")
 
     render.filepath = filepath
-    # render.image_settings.file_format = 'PNG'
+    render.image_settings.file_format = file_format
     render.resolution_percentage = 100
     render.resolution_x = tile_x
     render.resolution_y = tile_y
@@ -129,8 +135,143 @@ def do_render_tile(context, settings: RenderTile):
     cam.data.shift_y = shift_y
 
     # Render tile
-    # print('Rendering tile %s ...' % filepath)
+    # print("Rendering tile %s ..." % filepath)
     bpy.ops.render.render("INVOKE_DEFAULT", write_still = True)
+
+
+def do_merge_tiles(context, tiles):
+    scene = context.scene
+
+    render = scene.render
+
+    res_x = render.resolution_x
+    res_y = render.resolution_y
+
+    # Potentially free up memory from a previous merge
+    final_image_name = "super_res_render_output"
+    if final_image_name in bpy.data.images.keys():
+        print("Removing previous merge image from Blender's memory...")
+        bpy.data.images.remove(bpy.data.images[final_image_name])
+        gc.collect()
+
+    try:
+        print(f"Allocating storage for {res_x * res_y * 4} floats ({res_x * res_y} output pixels)...")
+        final_image_pixels = array('f', [0.0, 0.0, 0.0, 0.0] * res_x * res_y)
+        bytes_allocated = final_image_pixels.buffer_info()[1] * final_image_pixels.itemsize
+        print(f"Allocated {bytes_allocated / 1024 / 1024:,.2f} MBytes of memory.\n")
+
+        for (dimensions, offset, filepath) in tiles:
+            tile_x, tile_y = dimensions
+            offset_x, offset_y = offset
+
+            print(f"Loading tile: {filepath}")
+
+            try:
+                tile_image = bpy.data.images.load(filepath, check_existing=False)
+                image_x, image_y = tile_image.size
+
+                if not (image_x == tile_x and image_y == tile_y):
+                    raise RuntimeError(f"Image tile {filepath} has incorrect dimensions {image_x}x{image_y}! Expected {tile_x}x{tile_y}.")
+
+                if not tile_image.channels == 4:
+                    raise RuntimeError(f"Image tile {filepath} has {tile_image.channels} channels! Expected 4.")
+
+                # Copy the pixels
+                tile_pixels = list(tile_image.pixels)
+
+                for y in range(tile_y):
+                    # Copy a row
+                    source_pixel_start = y * tile_x * 4
+                    source_pixel_end = source_pixel_start + (tile_x * 4)
+
+                    target_y = offset_y + y
+                    target_pixel_start = (target_y * res_x + offset_x) * 4
+                    target_pixel_end = target_pixel_start + (tile_x * 4)
+
+                    final_image_pixels[target_pixel_start:target_pixel_end] = array('f', tile_pixels[source_pixel_start:source_pixel_end])
+
+                print(f"Copied {tile_x * tile_y} pixels OK.")
+                del tile_pixels
+
+            finally:
+                bpy.data.images.remove(tile_image)
+                del tile_image
+
+    except Exception as e:
+        print("Error compositing image tiles:", e)
+        raise
+
+    # Free up any memory still held by loaded images
+    print("\nFreeing image memory...")
+    gc.collect()
+
+    if not len(final_image_pixels) == res_x * res_y * 4:
+        raise RuntimeError(f"Got {len(final_image_pixels)} pixels; expected {res_x * res_y * 4}.")
+
+    final_image_ext = get_file_ext(render.image_settings.file_format)
+    final_image_filepath = "//super_res_render_output" # TODO
+    final_image_filepath = bpy.path.ensure_ext(final_image_filepath, final_image_ext)
+    final_image_filepath = os.path.realpath(bpy.path.abspath(final_image_filepath))
+
+    print(f'Composited output OK. Saving to "{final_image_filepath}" ...')
+
+    final_image = bpy.data.images.new(final_image_name, alpha=True, width=res_x, height=res_y)
+    final_image.alpha_mode = 'STRAIGHT'
+    final_image.pixels = final_image_pixels
+    final_image.filepath_raw = final_image_filepath
+    final_image.file_format = render.image_settings.file_format
+    final_image.save()
+
+    return
+
+
+def get_tile_filepath(context, col, row) -> str:
+    file_extension = get_file_ext('OPEN_EXR')
+    filepath = f"//PartRenders\\Part_R{(row + 1):02}_C{(col + 1):02}{file_extension}"
+    return filepath
+
+
+def get_file_ext(file_format: str) -> str:
+    """
+    `file_format` can be one of the following values:
+    - `BMP` BMP, Output image in bitmap format.
+    - `IRIS` Iris, Output image in (old!) SGI IRIS format.
+    - `PNG` PNG, Output image in PNG format.
+    - `JPEG` JPEG, Output image in JPEG format.
+    - `JPEG2000` JPEG 2000, Output image in JPEG 2000 format.
+    - `TARGA` Targa, Output image in Targa format.
+    - `TARGA_RAW` Targa Raw, Output image in uncompressed Targa format.
+    - `CINEON` Cineon, Output image in Cineon format.
+    - `DPX` DPX, Output image in DPX format.
+    - `OPEN_EXR_MULTILAYER` OpenEXR MultiLayer, Output image in multilayer OpenEXR format.
+    - `OPEN_EXR` OpenEXR, Output image in OpenEXR format.
+    - `HDR` Radiance HDR, Output image in Radiance HDR format.
+    - `TIFF` TIFF, Output image in TIFF format.
+    """
+    if file_format == 'BMP':
+        return ".bmp"
+    elif file_format == 'IRIS':
+        return ".iris"
+    elif file_format == 'PNG':
+        return ".png"
+    elif file_format == 'JPEG':
+        return ".jpg"
+    elif file_format == 'JPEG2000':
+        return ".jp2"
+    elif file_format in {'TARGA', 'TARGA_RAW'}:
+        return ".tga"
+    elif file_format == 'CINEON':
+        return ".cin"
+    elif file_format == 'DPX':
+        return ".dpx"
+    elif file_format in {'OPEN_EXR', 'OPEN_EXR_MULTILAYER'}:
+        return ".exr"
+    elif file_format == 'HDR':
+        return ".hdr"
+    elif file_format == 'TIFF':
+        return ".tif"
+
+    return "." + file_format.lower()
 
 
 def generate_tiles(context, saved_settings):
@@ -159,10 +300,10 @@ def generate_tiles(context, saved_settings):
     max_tile_y = ceil(res_y / tiles_per_side)
     last_tile_x = res_x - (max_tile_x * (tiles_per_side - 1))
     last_tile_y = res_y - (max_tile_y * (tiles_per_side - 1))
-    # print(f'number_divisions: {number_divisions}')
-    # print(f'tiles: {tiles_per_side}x{tiles_per_side} = {total_tiles} tiles')
-    # print(f'tile size: {max_tile_x}x{max_tile_y}px')
-    # print(f'last tile size: {last_tile_x}x{last_tile_y}px')
+    # print(f"number_divisions: {number_divisions}")
+    # print(f"tiles: {tiles_per_side}x{tiles_per_side} = {total_tiles} tiles")
+    # print(f"tile size: {max_tile_x}x{max_tile_y}px")
+    # print(f"last tile size: {last_tile_x}x{last_tile_y}px")
 
     def get_offset(col, row, tile_x, tile_y, is_last_col, is_last_row):
         offset_x = res_x - (tile_x / 2) if is_last_col else (col + 0.5) * tile_x
@@ -185,35 +326,95 @@ def generate_tiles(context, saved_settings):
             # Start a new column
             is_last_col = current_col == (tiles_per_side - 1)
 
-            # print(f'row {current_row}, col {current_col}')
-            # print(f'Last row? {"YES" if is_last_row else "no"} Last col? {"YES" if is_last_col else "no"}')
+            # print(f"row {current_row}, col {current_col}")
+            # print(f"Last row? {"YES" if is_last_row else "no"} Last col? {"YES" if is_last_col else "no"}")
 
             # Set Resolution (and aspect ratio)
             tile_x = last_tile_x if is_last_col else max_tile_x
             tile_y = last_tile_y if is_last_row else max_tile_y
-            # print(f'tile_x: {tile_x}, tile_y: {tile_y}')
+            # print(f"tile_x: {tile_x}, tile_y: {tile_y}")
 
             # Set CameraZoom
             f_len = focal_length * res_x / tile_x if tile_x >= tile_y else focal_length * res_x / tile_y
-            # print(f'Camera focal length: {f_len}mm')
+            # print(f"Camera focal length: {f_len}mm")
 
             # Set Camera Shift
             (x, y) = get_offset(current_col, current_row, tile_x, tile_y, is_last_col, is_last_row)
-            # print(f'offset x: {x}, offset y: {y}')
+            # print(f"offset x: {x}, offset y: {y}")
             (shift_x, shift_y) = get_shift(x, y, tile_x, tile_y)
-            # print(f'shift_x: {shift_x}')
-            # print(f'shift_y: {shift_y}')
+            # print(f"shift_x: {shift_x}")
+            # print(f"shift_y: {shift_y}")
 
             # Render
-            filepath = f'//PartRenders\\Part{(current_row + 1):02}R{(current_col + 1):02}C'
+            filepath = get_tile_filepath(context, current_col, current_row)
             tile = RenderTile(
                 dimensions = (tile_x, tile_y),
                 f_len = f_len,
                 shift = (shift_x, shift_y),
                 filepath = filepath,
+                file_format = 'OPEN_EXR',
             )
 
             tiles.append(tile)
+
+    return tiles
+
+
+def generate_tiles_for_merge(context):
+    scene = context.scene
+
+    render = scene.render
+    settings = scene.srr_settings
+
+    res_x = render.resolution_x
+    res_y = render.resolution_y
+
+    # Calculate things
+    # Divisions | Tiling | Tile Count
+    #     1     |   2x2  |      4
+    #     2     |   4x4  |     16
+    #     3     |   8x8  |     64
+    #     4     |  16x16 |    256
+    number_divisions = int(settings.subdivisions)
+
+    tiles_per_side = 2 ** number_divisions
+    total_tiles = tiles_per_side ** 2
+    max_tile_x = ceil(res_x / tiles_per_side)
+    max_tile_y = ceil(res_y / tiles_per_side)
+    last_tile_x = res_x - (max_tile_x * (tiles_per_side - 1))
+    last_tile_y = res_y - (max_tile_y * (tiles_per_side - 1))
+
+    # Create tiles
+    tiles = []
+    offset_y = res_y
+    for current_row in range(tiles_per_side):
+        # Start a new row
+        is_last_row = current_row == (tiles_per_side - 1)
+
+        # Set vertical resolution
+        tile_y = last_tile_y if is_last_row else max_tile_y
+        # Set vertical offset (image data runs bottom-to-top)
+        offset_y -= tile_y
+
+        offset_x = 0
+
+        for current_col in range(tiles_per_side):
+            # Start a new column
+            is_last_col = current_col == (tiles_per_side - 1)
+
+            # Set horizontal resolution
+            tile_x = last_tile_x if is_last_col else max_tile_x
+
+            filepath = get_tile_filepath(context, current_col, current_row)
+            tile = MergeTile(
+                dimensions = (tile_x, tile_y),
+                offset = (offset_x, offset_y),
+                filepath = filepath,
+            )
+
+            tiles.append(tile)
+
+            offset_x += max_tile_x
 
     return tiles
 
@@ -258,8 +459,8 @@ class SRR_OT_Render(bpy.types.Operator):
         self.saved_settings = save_render_settings(context)
 
         # Prepare tiles
-        # print('\n\n--------------')
-        # print('Preparing tiles...')
+        # print("\n\n--------------")
+        # print("Preparing tiles...")
         self.tiles = generate_tiles(context, self.saved_settings)
 
         # Setup callbacks
@@ -282,7 +483,7 @@ class SRR_OT_Render(bpy.types.Operator):
 
         if event.type == 'TIMER':
             if True in (not self.tiles, self.stop is True, settings.should_stop is True):
-                # print('\n*** STOPPING!')
+                # print("\n*** STOPPING!")
                 # Remove callbacks & clean up
                 bpy.app.handlers.render_pre.remove(self.render_pre)
                 bpy.app.handlers.render_post.remove(self.render_post)
@@ -300,7 +501,7 @@ class SRR_OT_Render(bpy.types.Operator):
                 return {'FINISHED'}
 
             elif self.rendering is False:
-                # print('\n=== Ready to render!')
+                # print("\n=== Ready to render!")
                 tile = self.tiles[0]
                 # print(tile)
 
@@ -316,6 +517,33 @@ class SRR_OT_StopRender(bpy.types.Operator):
 
     def execute(self, context):
         context.scene.srr_settings.should_stop = True
+
+        return {'FINISHED'}
+
+
+class SRR_OT_Merge(bpy.types.Operator):
+    bl_idname = "render.superres_merge"
+    bl_label = "Super Res Merge Tiles"
+    bl_description = "Merge rendered tiles into final resolution image"
+
+    @classmethod
+    def poll(cls, context):
+        scene = context.scene
+        settings = scene.srr_settings
+
+        return not settings.is_rendering is True
+
+    def execute(self, context):
+        scene = context.scene
+        settings = scene.srr_settings
+
+        print("Merging tiles...")
+
+        tiles = generate_tiles_for_merge(context)
+
+        do_merge_tiles(context, tiles)
+
+        print("Merge tiles done!")
 
         return {'FINISHED'}
 
@@ -361,11 +589,14 @@ class SRR_UI_PT_Panel(bpy.types.Panel):
 
         col = layout.column(align=True)
         col.separator()
-        # col.operator('render.superres', text="Render Frame")
         if context.scene.srr_settings.is_rendering is True:
-            col.operator('render.superres_kill', text='Cancel', icon='CANCEL')
+            col.operator('render.superres_kill', text="Cancel", icon='CANCEL')
         else:
-            col.operator('render.superres', text='Render Frame')
+            col.operator('render.superres', text="Render Frame")
+
+        col = layout.column(align=True)
+        col.separator()
+        col.operator('render.superres_merge', text="Merge Tiles", icon='MESH_GRID')
 
 
 # Addon Registration
@@ -374,6 +605,7 @@ classes = (
     SuperResRenderSettings,
     SRR_OT_Render,
     SRR_OT_StopRender,
+    SRR_OT_Merge,
     SRR_UI_PT_Panel,
 )
 
@@ -381,9 +613,7 @@ def register():
     for cls in classes:
         bpy.utils.register_class(cls)
 
-    bpy.types.Scene.srr_settings = PointerProperty(
-        type=SuperResRenderSettings
-    )
+    bpy.types.Scene.srr_settings = PointerProperty(type=SuperResRenderSettings)
 
 def unregister():
     del bpy.types.Scene.srr_settings
