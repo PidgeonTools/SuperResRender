@@ -1,15 +1,13 @@
 import bpy
+import gc
 import os
 import time
-from bpy.types import (
-    Operator,
-    PropertyGroup,
-)
 from bpy.props import (
     BoolProperty,
     EnumProperty,
     PointerProperty,
 )
+from array import array
 from math import ceil
 from typing import NamedTuple
 
@@ -22,7 +20,7 @@ SUBDIVISION_SIZES = (
 )
 
 
-class SuperResRenderSettings(PropertyGroup):
+class SuperResRenderSettings(bpy.types.PropertyGroup):
     subdivisions: EnumProperty(
         name="Tiles",
         items=SUBDIVISION_SIZES,
@@ -48,6 +46,7 @@ class RenderTile(NamedTuple):
     f_len: float
     shift: tuple
     filepath: str
+    file_format: str
 
 class MergeTile(NamedTuple):
     dimensions: tuple
@@ -117,6 +116,7 @@ def do_render_tile(context, settings: RenderTile):
     # (x, y) = settings.tile_offset
     (shift_x, shift_y) = settings.shift
     filepath = settings.filepath
+    file_format = settings.file_format
 
     # print("\nRendering tile:")
     # print(f"tile_x: {tile_x}, tile_y: {tile_y}")
@@ -125,8 +125,7 @@ def do_render_tile(context, settings: RenderTile):
     # print(f"shift x: {shift_x}, shift_y: {shift_y}")
 
     render.filepath = filepath
-    # render.image_settings.file_format = 'PNG'
-    render.image_settings.file_format = 'OPEN_EXR'
+    render.image_settings.file_format = file_format
     render.resolution_percentage = 100
     render.resolution_x = tile_x
     render.resolution_y = tile_y
@@ -148,86 +147,131 @@ def do_merge_tiles(context, tiles):
     res_x = render.resolution_x
     res_y = render.resolution_y
 
+    # Potentially free up memory from a previous merge
+    final_image_name = "super_res_render_output"
+    if final_image_name in bpy.data.images.keys():
+        print("Removing previous merge image from Blender's memory...")
+        bpy.data.images.remove(bpy.data.images[final_image_name])
+        gc.collect()
+
     try:
-        print(f"Allocating {res_x * res_y * 4} image pixels...")
-        final_image_pixels = [0.] * res_x * res_y * 4
+        print(f"Allocating storage for {res_x * res_y * 4} floats ({res_x * res_y} output pixels)...")
+        final_image_pixels = array('f', [0.0, 0.0, 0.0, 0.0] * res_x * res_y)
+        bytes_allocated = final_image_pixels.buffer_info()[1] * final_image_pixels.itemsize
+        print(f"Allocated {bytes_allocated / 1024 / 1024:,.2f} MBytes of memory.\n")
 
         for (dimensions, offset, filepath) in tiles:
-            print("\n--- New tile:")
-
             tile_x, tile_y = dimensions
             offset_x, offset_y = offset
 
-            print(f"Dimensions: {tile_x}x{tile_y}")
-            print(f"Offset: {offset_x}, {offset_y}")
-            print(f"File path: {filepath}")
+            print(f"Loading tile: {filepath}")
 
             try:
                 tile_image = bpy.data.images.load(filepath, check_existing=False)
                 image_x, image_y = tile_image.size
 
-                print(f"Loaded image tile: {filepath}")
-                print(f"Loaded image dimensions: {image_x}x{image_y}")
-
                 if not (image_x == tile_x and image_y == tile_y):
-                    raise RuntimeError(f"Image tile {filepath} has incorrect dimensions ({image_x}x{image_y})! Expected ({tile_x}x{tile_y}).")
+                    raise RuntimeError(f"Image tile {filepath} has incorrect dimensions {image_x}x{image_y}! Expected {tile_x}x{tile_y}.")
 
                 if not tile_image.channels == 4:
-                    raise RuntimeError(f"Image tile {filepath} has incorrect number of channels ({tile_image.channels})! Expected 4.")
+                    raise RuntimeError(f"Image tile {filepath} has {tile_image.channels} channels! Expected 4.")
 
                 # Copy the pixels
                 tile_pixels = list(tile_image.pixels)
+
                 for y in range(tile_y):
                     # Copy a row
                     source_pixel_start = y * tile_x * 4
                     source_pixel_end = source_pixel_start + (tile_x * 4)
-                    # print(f"  Row {y}: {source_pixel_start}-{source_pixel_end}")
 
                     target_y = offset_y + y
                     target_pixel_start = (target_y * res_x + offset_x) * 4
                     target_pixel_end = target_pixel_start + (tile_x * 4)
-                    # print(f"  Target: {offset_x}, {target_y}: {target_pixel_start}-{target_pixel_end}")
 
-                    final_image_pixels[target_pixel_start:target_pixel_end] = tile_pixels[source_pixel_start:source_pixel_end]
+                    final_image_pixels[target_pixel_start:target_pixel_end] = array('f', tile_pixels[source_pixel_start:source_pixel_end])
 
-                print("Copied image tile data OK.")
+                print(f"Copied {tile_x * tile_y} pixels OK.")
+                del tile_pixels
 
             finally:
                 bpy.data.images.remove(tile_image)
+                del tile_image
 
     except Exception as e:
-        print(e)
+        print("Error compositing image tiles:", e)
         raise
 
-    final_image_name = "super_res_render_output"
-    final_image_ext = '.png' # TODO
+    # Free up any memory still held by loaded images
+    print("\nFreeing image memory...")
+    gc.collect()
+
+    if not len(final_image_pixels) == res_x * res_y * 4:
+        raise RuntimeError(f"Got {len(final_image_pixels)} pixels; expected {res_x * res_y * 4}.")
+
+    final_image_ext = get_file_ext(render.image_settings.file_format)
     final_image_filepath = "//super_res_render_output" # TODO
     final_image_filepath = bpy.path.ensure_ext(final_image_filepath, final_image_ext)
     final_image_filepath = os.path.realpath(bpy.path.abspath(final_image_filepath))
 
-    if final_image_name in bpy.data.images.keys():
-        bpy.data.images.remove(bpy.data.images[final_image_name])
-
-    if len(final_image_pixels) == res_x * res_y * 4:
-        print("Final image pixels count OK")
-    else:
-        print(f"Got {len(final_image_pixels)} pixels; expected {res_x * res_y * 4}.")
+    print(f'Composited output OK. Saving to "{final_image_filepath}" ...')
 
     final_image = bpy.data.images.new(final_image_name, alpha=True, width=res_x, height=res_y)
     final_image.alpha_mode = 'STRAIGHT'
     final_image.pixels = final_image_pixels
     final_image.filepath_raw = final_image_filepath
-    # final_image.file_format = render.image_settings.file_format
-    final_image.file_format = 'PNG' # TODO
+    final_image.file_format = render.image_settings.file_format
     final_image.save()
 
     return
 
 
-def get_tile_filepath(context, col, row):
-    file_extension = ".exr"
+def get_tile_filepath(context, col, row) -> str:
+    file_extension = get_file_ext('OPEN_EXR')
     filepath = f"//PartRenders\\Part_R{(row + 1):02}_C{(col + 1):02}{file_extension}"
     return filepath
+
+
+def get_file_ext(file_format: str) -> str:
+    """
+    `file_format` can be one of the following values:
+    - `BMP` BMP, Output image in bitmap format.
+    - `IRIS` Iris, Output image in (old!) SGI IRIS format.
+    - `PNG` PNG, Output image in PNG format.
+    - `JPEG` JPEG, Output image in JPEG format.
+    - `JPEG2000` JPEG 2000, Output image in JPEG 2000 format.
+    - `TARGA` Targa, Output image in Targa format.
+    - `TARGA_RAW` Targa Raw, Output image in uncompressed Targa format.
+    - `CINEON` Cineon, Output image in Cineon format.
+    - `DPX` DPX, Output image in DPX format.
+    - `OPEN_EXR_MULTILAYER` OpenEXR MultiLayer, Output image in multilayer OpenEXR format.
+    - `OPEN_EXR` OpenEXR, Output image in OpenEXR format.
+    - `HDR` Radiance HDR, Output image in Radiance HDR format.
+    - `TIFF` TIFF, Output image in TIFF format.
+    """
+    if file_format == 'BMP':
+        return ".bmp"
+    elif file_format == 'IRIS':
+        return ".iris"
+    elif file_format == 'PNG':
+        return ".png"
+    elif file_format == 'JPEG':
+        return ".jpg"
+    elif file_format == 'JPEG2000':
+        return ".jp2"
+    elif file_format in {'TARGA', 'TARGA_RAW'}:
+        return ".tga"
+    elif file_format == 'CINEON':
+        return ".cin"
+    elif file_format == 'DPX':
+        return ".dpx"
+    elif file_format in {'OPEN_EXR', 'OPEN_EXR_MULTILAYER'}:
+        return ".exr"
+    elif file_format == 'HDR':
+        return ".hdr"
+    elif file_format == 'TIFF':
+        return ".tif"
+
+    return "." + file_format.lower()
 
 
 def generate_tiles(context, saved_settings):
@@ -308,6 +352,7 @@ def generate_tiles(context, saved_settings):
                 f_len = f_len,
                 shift = (shift_x, shift_y),
                 filepath = filepath,
+                file_format = 'OPEN_EXR',
             )
 
             tiles.append(tile)
@@ -482,7 +527,7 @@ class SRR_OT_Merge(bpy.types.Operator):
     bl_description = "Merge rendered tiles into final resolution image"
 
     @classmethod
-    def poll(self, context):
+    def poll(cls, context):
         scene = context.scene
         settings = scene.srr_settings
 
@@ -492,7 +537,7 @@ class SRR_OT_Merge(bpy.types.Operator):
         scene = context.scene
         settings = scene.srr_settings
 
-        print("Merge tiles!")
+        print("Merging tiles...")
 
         tiles = generate_tiles_for_merge(context)
 
@@ -568,9 +613,7 @@ def register():
     for cls in classes:
         bpy.utils.register_class(cls)
 
-    bpy.types.Scene.srr_settings = PointerProperty(
-        type=SuperResRenderSettings
-    )
+    bpy.types.Scene.srr_settings = PointerProperty(type=SuperResRenderSettings)
 
 def unregister():
     del bpy.types.Scene.srr_settings
