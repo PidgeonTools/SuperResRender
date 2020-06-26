@@ -190,8 +190,8 @@ def do_merge_tiles(context, tiles):
 
                     final_image_pixels[target_pixel_start:target_pixel_end] = array('f', tile_pixels[source_pixel_start:source_pixel_end])
 
-                print(f"Copied {tile_x * tile_y} pixels OK.")
                 del tile_pixels
+                print(f"Copied {tile_x * tile_y} pixels OK.")
 
             finally:
                 bpy.data.images.remove(tile_image)
@@ -215,12 +215,23 @@ def do_merge_tiles(context, tiles):
 
     print(f'Composited output OK. Saving to "{final_image_filepath}" ...')
 
-    final_image = bpy.data.images.new(final_image_name, alpha=True, width=res_x, height=res_y)
+    final_image = bpy.data.images.new(final_image_name, alpha=True, float_buffer=True, width=res_x, height=res_y)
     final_image.alpha_mode = 'STRAIGHT'
-    final_image.pixels = final_image_pixels
+    final_image.generated_type = 'BLANK'
     final_image.filepath_raw = final_image_filepath
     final_image.file_format = render.image_settings.file_format
+
+    if bpy.app.version[0] == 2 and bpy.app.version[1] < 83:
+        # Poor users that haven't upgraded to 2.83, I hope you have more than 26 gigs of RAM...
+        final_image.pixels[:] = final_image_pixels.tolist()
+    else:
+        # This is so. much. better.!
+        final_image.pixels.foreach_set(final_image_pixels)
+
     final_image.save()
+
+    del final_image_pixels
+    gc.collect()
 
     return
 
