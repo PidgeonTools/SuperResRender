@@ -44,6 +44,7 @@ class SuperResRenderSettings(bpy.types.PropertyGroup):
 class RenderTile(NamedTuple):
     dimensions: tuple
     f_len: float
+    fstop: float
     shift: tuple
     filepath: str
     file_format: str
@@ -61,6 +62,7 @@ class SavedRenderSettings(NamedTuple):
     old_res_y: int
     old_shift_x: float
     old_shift_y: float
+    old_aperture_fstop: float
     old_focal_length: float
     old_focal_unit: str
     old_camera_name: str
@@ -79,6 +81,7 @@ def save_render_settings(context):
         old_res_y = render.resolution_y,
         old_shift_x = cam.data.shift_x,
         old_shift_y = cam.data.shift_y,
+        old_aperture_fstop = cam.data.dof.aperture_fstop,
         old_focal_length = cam.data.lens,
         old_focal_unit = cam.data.lens_unit,
         old_camera_name = cam.name,
@@ -97,6 +100,7 @@ def restore_render_settings(context, settings: SavedRenderSettings):
     render.resolution_y = settings.old_res_y
     cam.data.shift_x = settings.old_shift_x
     cam.data.shift_y = settings.old_shift_y
+    cam.data.dof.aperture_fstop = settings.old_aperture_fstop
     cam.data.lens_unit = settings.old_focal_unit
     cam.data.lens = settings.old_focal_length
     cam.name = settings.old_camera_name
@@ -113,6 +117,7 @@ def do_render_tile(context, settings: RenderTile):
     # Prepare render settings
     (tile_x, tile_y) = settings.dimensions
     f_len = settings.f_len
+    fstop = settings.fstop
     # (x, y) = settings.tile_offset
     (shift_x, shift_y) = settings.shift
     filepath = settings.filepath
@@ -131,6 +136,7 @@ def do_render_tile(context, settings: RenderTile):
     render.resolution_y = tile_y
     cam.data.lens_unit = 'MILLIMETERS'
     cam.data.lens = f_len
+    cam.data.dof.aperture_fstop = fstop
     cam.data.shift_x = shift_x
     cam.data.shift_y = shift_y
 
@@ -221,7 +227,7 @@ def do_merge_tiles(context, tiles):
     final_image.filepath_raw = final_image_filepath
     final_image.file_format = render.image_settings.file_format
 
-    if bpy.app.version[0] == 2 and bpy.app.version[1] < 83:
+    if bpy.app.version < (2, 83):
         # Poor users that haven't upgraded to 2.83, I hope you have more than 26 gigs of RAM...
         final_image.pixels[:] = final_image_pixels.tolist()
     else:
@@ -285,7 +291,7 @@ def get_file_ext(file_format: str) -> str:
     return "." + file_format.lower()
 
 
-def generate_tiles(context, saved_settings):
+def generate_tiles(context, saved_settings: SavedRenderSettings):
     scene = context.scene
 
     cam = scene.camera
@@ -296,6 +302,7 @@ def generate_tiles(context, saved_settings):
     res_x = render.resolution_x
     res_y = render.resolution_y
     focal_length = saved_settings.old_focal_length
+    aperture_fstop = saved_settings.old_aperture_fstop
 
     # Calculate things
     # Divisions | Tiling | Tile Count
@@ -348,6 +355,8 @@ def generate_tiles(context, saved_settings):
             # Set CameraZoom
             f_len = focal_length * res_x / tile_x if tile_x >= tile_y else focal_length * res_x / tile_y
             # print(f"Camera focal length: {f_len}mm")
+            fstop = aperture_fstop * (f_len / focal_length)
+            # print(f"Camera fstop: {fstop}")
 
             # Set Camera Shift
             (x, y) = get_offset(current_col, current_row, tile_x, tile_y, is_last_col, is_last_row)
@@ -361,6 +370,7 @@ def generate_tiles(context, saved_settings):
             tile = RenderTile(
                 dimensions = (tile_x, tile_y),
                 f_len = f_len,
+                fstop = fstop,
                 shift = (shift_x, shift_y),
                 filepath = filepath,
                 file_format = 'OPEN_EXR',
