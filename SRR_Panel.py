@@ -39,6 +39,8 @@ class SRR_UI_PT_Panel(Panel):
 
         col = layout.column(align=True)
         col.active = panel_active
+        col.prop(settings, 'render_method')
+        col.separator()
         col.prop(settings, "subdivisions")
 
         col = layout.column(align=True)

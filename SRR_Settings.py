@@ -63,7 +63,7 @@ SUBDIVISION_SIZES = (
 
 class SRR_Settings(PropertyGroup):
     render_method: EnumProperty(
-        name="Render method",
+        name="Method",
         items=RENDER_METHODS,
         default='camshift',
         description="Method used to divide image into tiles while rendering",
