@@ -16,19 +16,63 @@ bl_info = {
     "author" : "Kevin Lorengel, Chris Bond (Kamikaze)",
     "description" : "Render in extreme resolution!",
     "blender" : (2, 83, 0),
-    "version" : (0, 1, 0),
+    "version" : (0, 2, 0),
     "location" : "Properties > Output > SuperResRender",
     "warning" : "",
     "category" : "Render"
 }
 
-from . import SuperResRender
+import bpy
+from bpy.app.handlers import persistent
+from bpy.props import PointerProperty
+
+from .SRR_Settings import (
+    SRR_RenderStatus,
+    SRR_Settings,
+)
+from .SuperResRender import (
+    SRR_OT_Render,
+    SRR_OT_StopRender,
+    SRR_OT_Merge,
+)
+from .SRR_Panel import (
+    SRR_UI_PT_Panel,
+)
+
+
+### Addon Registration
+
+@persistent
+def load_handler(dummy):
+    try:
+        settings: SRR_Settings = bpy.context.scene.srr_settings
+        settings.status.is_rendering = False
+        settings.status.should_stop = False
+    except:
+        pass
+
+classes = (
+    SRR_RenderStatus,
+    SRR_Settings,
+    SRR_OT_Render,
+    SRR_OT_StopRender,
+    SRR_OT_Merge,
+    SRR_UI_PT_Panel,
+)
 
 def register():
-    SuperResRender.register()
+    for cls in classes:
+        bpy.utils.register_class(cls)
+
+    bpy.types.Scene.srr_settings = PointerProperty(type=SRR_Settings)
+
+    bpy.app.handlers.load_post.append(load_handler)
 
 def unregister():
-    SuperResRender.unregister()
+    del bpy.types.Scene.srr_settings
+
+    for cls in reversed(classes):
+        bpy.utils.unregister_class(cls)
 
 if __name__ == "__main__":
     register()

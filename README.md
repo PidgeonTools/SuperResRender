@@ -1,2 +1,2 @@
 # SuperResRender
-SRR!
+Render your images at super resolution!
