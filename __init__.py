@@ -15,8 +15,8 @@ bl_info = {
     "name" : "[Pidgeon Tools] Super Resolution Render",
     "author" : "Kevin Lorengel, Chris Bond (Kamikaze)",
     "description" : "Render in extreme resolution!",
-    "blender" : (2, 83, 0),
-    "version" : (0, 2, 0),
+    "blender" : (2, 92, 0),
+    "version" : (1, 0, 0),
     "location" : "Properties > Output > SuperResRender",
     "warning" : "",
     "category" : "Render"
