@@ -5,6 +5,7 @@ from bpy.types import Context, Operator, Scene, Timer
 
 from .SRR_Settings import SRR_RenderStatus, SRR_Settings
 from .utils.merge_tiles import do_merge_tiles, generate_tiles_for_merge
+from .utils.message_box import ShowMessageBox
 from .utils.saved_render_settings import (
     restore_render_settings,
     save_render_settings,
@@ -52,8 +53,6 @@ class SRR_OT_Render(Operator):
         # Reset state
         self.stop = False
         self.rendering = False
-        status.is_rendering = True
-        status.should_stop = False
 
         # Save settings
         self.saved_settings = save_render_settings(context)
@@ -65,6 +64,8 @@ class SRR_OT_Render(Operator):
 
         status.tiles_total = len(self.tiles)
         status.tiles_done = 0
+        status.is_rendering = True
+        status.should_stop = False
 
         # Setup callbacks
         bpy.app.handlers.render_pre.append(self.render_pre)
@@ -102,7 +103,11 @@ class SRR_OT_Render(Operator):
                 restore_render_settings(context, self.saved_settings)
 
                 if was_cancelled:
+                    self.report({'WARNING'}, "Rendering aborted")
                     return {'CANCELLED'}
+
+                self.report({'INFO'}, "Rendering done")
+                ShowMessageBox("Rendering done!", "Success")
                 return {'FINISHED'}
 
             elif self.rendering is False:
@@ -143,12 +148,13 @@ class SRR_OT_Merge(Operator):
         return not status.is_rendering
 
     def execute(self, context: Context):
-        print("Merging tiles...")
+        self.report({'INFO'}, "Merging tiles...")
 
         tiles = generate_tiles_for_merge(context)
 
         do_merge_tiles(context, tiles)
 
-        print("Merge tiles done!")
+        self.report({'INFO'}, "Merge tiles done!")
+        ShowMessageBox("Merging tiles done!", "Success")
 
         return {'FINISHED'}
