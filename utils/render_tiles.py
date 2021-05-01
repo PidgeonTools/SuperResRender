@@ -77,6 +77,11 @@ def generate_tiles(context: Context, saved_settings: SavedRenderSettings) -> Lis
     res_y = render.resolution_y
     focal_length = saved_settings.old_focal_length
     aperture_fstop = saved_settings.old_aperture_fstop
+    existing_shift_x = saved_settings.old_shift_x
+    existing_shift_y = saved_settings.old_shift_y
+    aspect = res_x if res_x >= res_y else res_y
+    shift_offset_x = existing_shift_x * aspect
+    shift_offset_y = existing_shift_y * -aspect
 
     # Calculate things
     # Divisions | Tiling | Tile Count
@@ -141,13 +146,15 @@ def generate_tiles(context: Context, saved_settings: SavedRenderSettings) -> Lis
 
             if settings.render_method == 'camshift':
                 # Set CameraZoom
-                f_len = focal_length * res_x / tile_x if tile_x >= tile_y else focal_length * res_x / tile_y
+                f_len = focal_length * ((res_x / tile_x) if tile_x >= tile_y else (res_y / tile_y))
                 # print(f"Camera focal length: {f_len}mm")
                 fstop = aperture_fstop * (f_len / focal_length)
                 # print(f"Camera fstop: {fstop}")
 
                 # Set Camera Shift
                 (x, y) = get_offset(current_col, current_row, tile_x, tile_y, is_last_col, is_last_row)
+                x += shift_offset_x
+                y += shift_offset_y
                 # print(f"offset x: {x}, offset y: {y}")
                 (shift_x, shift_y) = get_shift(x, y, tile_x, tile_y)
                 # print(f"shift_x: {shift_x}")
