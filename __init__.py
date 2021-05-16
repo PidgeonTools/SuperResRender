@@ -12,7 +12,7 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 bl_info = {
-    "name" : "[Pidgeon Tools] Super Resolution Render",
+    "name" : "Super Resolution Render (SFR)",
     "author" : "Kevin Lorengel, Chris Bond (Kamikaze)",
     "description" : "Render in extreme resolution!",
     "blender" : (2, 92, 0),
