@@ -16,7 +16,7 @@ bl_info = {
     "author" : "Kevin Lorengel, Chris Bond (Kamikaze)",
     "description" : "Render in extreme resolution!",
     "blender" : (2, 92, 0),
-    "version" : (1, 1, 0),
+    "version" : (1, 2, 0),
     "location" : "Properties > Output > SuperResRender",
     "warning" : "",
     "category" : "Render"
