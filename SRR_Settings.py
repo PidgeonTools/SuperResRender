@@ -47,13 +47,6 @@ class SRR_RenderStatus(PropertyGroup):
         get=(lambda self: 0 if self.tiles_total == 0 else 100 * self.tiles_done / self.tiles_total),
         set=(lambda self, value: None),
     )
-        
-    start_tile: IntProperty(
-        name="Start Tile",
-        description="The Tile it starts rendering from.",
-        default = 1, min = 1, max = 256
-    )
-
 
 RENDER_METHODS = (
     ('camshift', "Camera shift", "Break the image into tiles using camera shift"),
@@ -89,3 +82,12 @@ class SRR_Settings(PropertyGroup):
         type=SRR_RenderStatus,
         options=set(), # Not animatable!
     )
+        
+    start_tile: IntProperty(
+        name="Start Tile",
+        description="The Tile it starts rendering from.",
+        default = 1,
+        min = 1,
+        max = 256,
+    )
+

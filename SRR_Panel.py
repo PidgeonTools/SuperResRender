@@ -42,16 +42,17 @@ class SRR_UI_PT_Panel(Panel):
         col.prop(settings, 'render_method')
         col.separator()
         col.prop(settings, "subdivisions")
+        col.separator()  
 
         col = layout.column(align=True)
         col.label(text="Max tile: %ipx x %ipx" % (max_tile_x, max_tile_y))
 
         col = layout.column(align=True)
         col.label(text="Total: %i tiles" % total_tiles)
-        col.separator()   
+        col.separator()  
+        col.prop(settings, "start_tile") 
+        col.separator()
         
-        col = layout.column(align=True)
-        col.prop(settings, "start_tile")
 
         col = layout.column(align=True)
         col.active = True
