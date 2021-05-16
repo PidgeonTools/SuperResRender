@@ -48,7 +48,10 @@ class SRR_UI_PT_Panel(Panel):
 
         col = layout.column(align=True)
         col.label(text="Total: %i tiles" % total_tiles)
-        col.separator()
+        col.separator()   
+        
+        col = layout.column(align=True)
+        col.prop(settings, "start_tile")
 
         col = layout.column(align=True)
         col.active = True
