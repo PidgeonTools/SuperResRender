@@ -67,3 +67,8 @@ class SRR_UI_PT_Panel(Panel):
         col = layout.column(align=True)
         col.active = panel_active
         col.operator('render.superres_merge', text="Merge Tiles", icon='MESH_GRID')
+        
+        layout.separator()
+        col = layout.column()
+        op = col.operator("wm.url_open", text="Support", icon="URL")
+        op.url = "https://discord.gg/cnFdGQP"
