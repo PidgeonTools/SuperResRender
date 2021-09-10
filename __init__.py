@@ -35,6 +35,9 @@ from .SuperResRender import (
     SRR_OT_StopRender,
     SRR_OT_Merge,
 )
+from .SplitCamera import (
+    SRR_OT_SplitCamera,
+)
 from .SRR_Panel import (
     SRR_UI_PT_Panel,
 )
@@ -120,6 +123,7 @@ classes = (
     SRR_OT_Render,
     SRR_OT_StopRender,
     SRR_OT_Merge,
+    SRR_OT_SplitCamera,
     SRR_UI_PT_Panel,
     DemoPreferences,
 )

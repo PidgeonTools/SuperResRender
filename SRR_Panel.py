@@ -28,8 +28,10 @@ class SRR_UI_PT_Panel(Panel):
         number_divisions = int(settings.subdivisions)
         tiles_per_side = 2 ** number_divisions
         total_tiles = tiles_per_side ** 2
-        max_tile_x = ceil(res_x / tiles_per_side)
-        max_tile_y = ceil(res_y / tiles_per_side)
+        ideal_tile_x = res_x / tiles_per_side
+        ideal_tile_y = res_y / tiles_per_side
+        max_tile_x = ceil(ideal_tile_x)
+        max_tile_y = ceil(ideal_tile_y)
 
         panel_active = not status.is_rendering
 
@@ -42,32 +44,42 @@ class SRR_UI_PT_Panel(Panel):
         col.prop(settings, 'render_method')
         col.separator()
         col.prop(settings, "subdivisions")
-        col.separator()  
-
-        col = layout.column(align=True)
-        col.label(text="Max tile: %ipx x %ipx" % (max_tile_x, max_tile_y))
-
-        col = layout.column(align=True)
-        col.label(text="Total: %i tiles" % total_tiles)
-        col.separator()  
-        col.prop(settings, "start_tile") 
         col.separator()
-        
 
-        col = layout.column(align=True)
-        col.active = True
-        if status.is_rendering:
-            col.label(text=f"{status.tiles_done} / {status.tiles_total} tiles rendered", icon='INFO')
-            col.prop(status, "percent_complete")
-            col.operator('render.superres_kill', text="Cancel", icon='CANCEL')
+        if settings.render_method == 'camsplit':
+            col = layout.column(align=True)
+            col.label(text=f"Suggested resolution: {max_tile_x}px x {max_tile_y}px ({(100 / tiles_per_side):.3g}%)")
+
         else:
-            col.operator('render.superres', text="Render Frame")
-        col.separator()
+            col = layout.column(align=True)
+            col.label(text=f"Max tile: {max_tile_x}px x {max_tile_y}px")
 
         col = layout.column(align=True)
-        col.active = panel_active
-        col.operator('render.superres_merge', text="Merge Tiles", icon='MESH_GRID')
-        
+        col.label(text=f"Total: {total_tiles} tiles")
+        col.separator()
+
+        if settings.render_method == 'camsplit':
+            col = layout.column(align=True)
+            col.operator('render.superres_splitcam', text="Split Active Camera", icon='MESH_GRID')
+
+        else:
+            col = layout.column(align=True)
+            col.prop(settings, "start_tile")
+            col.separator()
+
+            col = layout.column(align=True)
+            if status.is_rendering:
+                col.label(text=f"{status.tiles_done} / {status.tiles_total} tiles rendered", icon='INFO')
+                col.prop(status, "percent_complete")
+                col.operator('render.superres_kill', text="Cancel", icon='CANCEL')
+            else:
+                col.operator('render.superres', text="Render Frame")
+            col.separator()
+
+            col = layout.column(align=True)
+            col.active = panel_active
+            col.operator('render.superres_merge', text="Merge Tiles", icon='MESH_GRID')
+
         layout.separator()
         col = layout.column()
         op = col.operator("wm.url_open", text="Support", icon="URL")

@@ -51,6 +51,7 @@ class SRR_RenderStatus(PropertyGroup):
 RENDER_METHODS = (
     ('camshift', "Camera shift", "Break the image into tiles using camera shift"),
     ('border', "Render border", "Break the image into tiles using render border regions"),
+    ('camsplit', "Split camera", "Subdivide the camera, creating a new camera for each tile"),
 )
 
 SUBDIVISION_SIZES = (
@@ -82,7 +83,7 @@ class SRR_Settings(PropertyGroup):
         type=SRR_RenderStatus,
         options=set(), # Not animatable!
     )
-        
+
     start_tile: IntProperty(
         name="Start Tile",
         description="The Tile it starts rendering from.",

@@ -55,7 +55,7 @@ class SRR_OT_Render(Operator):
         self.rendering = False
 
         # Save settings
-        self.saved_settings = save_render_settings(context)
+        self.saved_settings = save_render_settings(context, scene.camera)
 
         # Prepare tiles
         # print("\n\n--------------")
@@ -105,7 +105,7 @@ class SRR_OT_Render(Operator):
                 status.should_stop = False
                 status.is_rendering = False
 
-                restore_render_settings(context, self.saved_settings)
+                restore_render_settings(context, self.saved_settings, scene.camera)
 
                 if was_cancelled:
                     self.report({'WARNING'}, "Rendering aborted")
@@ -120,7 +120,7 @@ class SRR_OT_Render(Operator):
                 tile = self.tiles[0]
                 # print(tile)
 
-                do_render_tile(context, tile)
+                do_render_tile(context, tile, scene.camera)
 
         # Allow stop button to cancel rendering rather than this modal
         return {'PASS_THROUGH'}

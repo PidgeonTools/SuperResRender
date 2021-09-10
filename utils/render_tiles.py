@@ -1,16 +1,23 @@
 import bpy
-from bpy.types import Context
+from bpy.types import Camera, Context, Object
 from math import ceil
-from typing import List, NamedTuple
+from typing import List, NamedTuple, Union
 
 from ..SRR_Settings import SRR_Settings
 from .saved_render_settings import SavedRenderSettings
-from .file import get_tile_filepath
+from .file import get_tile_filepath, get_tile_suffix
 
 
 class RenderTileCameraShiftSettings(NamedTuple):
     tile_x: int
     tile_y: int
+    f_len: float
+    fstop: float
+    shift_x: float
+    shift_y: float
+
+class TileCameraSplitSettings(NamedTuple):
+    camera_name: str
     f_len: float
     fstop: float
     shift_x: float
@@ -22,15 +29,20 @@ class RenderTileRenderBorderSettings(NamedTuple):
     border_max_x: float
     border_max_y: float
 
+TileSettings = Union[
+    RenderTileCameraShiftSettings,
+    RenderTileRenderBorderSettings,
+    TileCameraSplitSettings,
+]
+
 class RenderTile(NamedTuple):
-    render_method: str # Python 3.8+: Literal['camshift', 'border']
-    camshift_settings: RenderTileCameraShiftSettings
-    border_settings: RenderTileRenderBorderSettings
+    render_method: str # Python 3.8+: Literal['camshift', 'border', 'camsplit']
+    tile_settings: TileSettings
     filepath: str
     file_format: str
 
 
-def do_render_tile(context: Context, render_tile: RenderTile):
+def do_render_tile(context: Context, render_tile: RenderTile, camera_object: Object):
     scene = context.scene
     render = scene.render
 
@@ -39,20 +51,20 @@ def do_render_tile(context: Context, render_tile: RenderTile):
     render.image_settings.file_format = render_tile.file_format
 
     if render_tile.render_method == 'camshift':
-        cam = scene.camera
-        settings: RenderTileCameraShiftSettings = render_tile.camshift_settings
+        camera_data: Camera = camera_object.data
+        settings: RenderTileCameraShiftSettings = render_tile.tile_settings
 
         render.resolution_percentage = 100
         render.resolution_x = settings.tile_x
         render.resolution_y = settings.tile_y
-        cam.data.lens_unit = 'MILLIMETERS'
-        cam.data.lens = settings.f_len
-        cam.data.dof.aperture_fstop = settings.fstop
-        cam.data.shift_x = settings.shift_x
-        cam.data.shift_y = settings.shift_y
+        camera_data.lens_unit = 'MILLIMETERS'
+        camera_data.lens = settings.f_len
+        camera_data.dof.aperture_fstop = settings.fstop
+        camera_data.shift_x = settings.shift_x
+        camera_data.shift_y = settings.shift_y
 
-    else:
-        settings: RenderTileRenderBorderSettings = render_tile.border_settings
+    elif render_tile.render_method == 'border':
+        settings: RenderTileRenderBorderSettings = render_tile.tile_settings
 
         render.use_border = True
         render.use_crop_to_border = True
@@ -92,9 +104,10 @@ def generate_tiles(context: Context, saved_settings: SavedRenderSettings) -> Lis
     number_divisions = int(settings.subdivisions)
 
     tiles_per_side = 2 ** number_divisions
-    total_tiles = tiles_per_side ** 2
-    max_tile_x = ceil(res_x / tiles_per_side)
-    max_tile_y = ceil(res_y / tiles_per_side)
+    ideal_tile_x = res_x / tiles_per_side
+    ideal_tile_y = res_y / tiles_per_side
+    max_tile_x = ceil(ideal_tile_x)
+    max_tile_y = ceil(ideal_tile_y)
     last_tile_x = res_x - (max_tile_x * (tiles_per_side - 1))
     last_tile_y = res_y - (max_tile_y * (tiles_per_side - 1))
     # print(f"number_divisions: {number_divisions}")
@@ -136,15 +149,17 @@ def generate_tiles(context: Context, saved_settings: SavedRenderSettings) -> Lis
 
             # print(f"row {current_row}, col {current_col}")
             # print(f"Last row? {"YES" if is_last_row else "no"} Last col? {"YES" if is_last_col else "no"}")
-            camshift_settings: RenderTileCameraShiftSettings = None
-            border_settings: RenderTileRenderBorderSettings = None
+            tile_settings: TileSettings = None
+            tile_suffix = get_tile_suffix(current_col, current_row)
 
             # Set Resolution (and aspect ratio)
-            tile_x = last_tile_x if is_last_col else max_tile_x
-            tile_y = last_tile_y if is_last_row else max_tile_y
+            tile_x = ideal_tile_x if settings.render_method == 'camsplit' else \
+                last_tile_x if is_last_col else max_tile_x
+            tile_y = ideal_tile_y if settings.render_method == 'camsplit' else \
+                last_tile_y if is_last_row else max_tile_y
             # print(f"tile_x: {tile_x}, tile_y: {tile_y}")
 
-            if settings.render_method == 'camshift':
+            if settings.render_method in ['camshift', 'camsplit']:
                 # Set CameraZoom
                 f_len = focal_length * ((res_x / tile_x) if tile_x >= tile_y else (res_y / tile_y))
                 # print(f"Camera focal length: {f_len}mm")
@@ -160,32 +175,44 @@ def generate_tiles(context: Context, saved_settings: SavedRenderSettings) -> Lis
                 # print(f"shift_x: {shift_x}")
                 # print(f"shift_y: {shift_y}")
 
-                camshift_settings = RenderTileCameraShiftSettings(
-                    tile_x = tile_x,
-                    tile_y = tile_y,
-                    f_len = f_len,
-                    fstop = fstop,
-                    shift_x = shift_x,
-                    shift_y = shift_y,
-                )
+                if settings.render_method == 'camshift':
+                    tile_settings = RenderTileCameraShiftSettings(
+                        tile_x = tile_x,
+                        tile_y = tile_y,
+                        f_len = f_len,
+                        fstop = fstop,
+                        shift_x = shift_x,
+                        shift_y = shift_y,
+                    )
+                elif settings.render_method == 'camsplit':
+                    camera_name = f"{saved_settings.old_camera_name}{tile_suffix}"
+                    tile_settings = TileCameraSplitSettings(
+                        camera_name = camera_name,
+                        f_len = f_len,
+                        fstop = fstop,
+                        shift_x = shift_x,
+                        shift_y = shift_y,
+                    )
 
-            else:
+            elif settings.render_method == 'border':
                 (border_min_x, border_min_y, border_max_x, border_max_y) = get_border(
                     current_col, current_row, tile_x, tile_y, is_last_col, is_last_row)
 
-                border_settings = RenderTileRenderBorderSettings(
+                tile_settings = RenderTileRenderBorderSettings(
                     border_min_x = border_min_x,
                     border_min_y = border_min_y,
                     border_max_x = border_max_x,
                     border_max_y = border_max_y,
                 )
 
+            else:
+                raise f"Unhandled render method {settings.render_method}"
+
             # Render
-            filepath = get_tile_filepath(current_col, current_row)
+            filepath = get_tile_filepath(tile_suffix)
             tile = RenderTile(
                 render_method = settings.render_method,
-                camshift_settings = camshift_settings,
-                border_settings = border_settings,
+                tile_settings = tile_settings,
                 filepath = filepath,
                 file_format = 'OPEN_EXR',
             )

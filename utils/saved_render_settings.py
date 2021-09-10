@@ -1,5 +1,5 @@
 import bpy
-from bpy.types import Context
+from bpy.types import Camera, Context, Object, RenderSettings, Scene
 from typing import NamedTuple
 
 
@@ -9,6 +9,7 @@ class SavedRenderSettings(NamedTuple):
     old_resolution_percentage: int
     old_res_x: int
     old_res_y: int
+    old_camera_name: str
     old_shift_x: float
     old_shift_y: float
     old_aperture_fstop: float
@@ -22,10 +23,10 @@ class SavedRenderSettings(NamedTuple):
     old_border_max_y: float
 
 
-def save_render_settings(context: Context):
-    scene = context.scene
-    cam = scene.camera
-    render = scene.render
+def save_render_settings(context: Context, camera_object: Object) -> SavedRenderSettings:
+    scene: Scene = context.scene
+    render: RenderSettings = scene.render
+    camera_data: Camera = camera_object.data
 
     return SavedRenderSettings(
         old_file_path = render.filepath,
@@ -33,11 +34,12 @@ def save_render_settings(context: Context):
         old_resolution_percentage = render.resolution_percentage,
         old_res_x = render.resolution_x,
         old_res_y = render.resolution_y,
-        old_shift_x = cam.data.shift_x,
-        old_shift_y = cam.data.shift_y,
-        old_aperture_fstop = cam.data.dof.aperture_fstop,
-        old_focal_length = cam.data.lens,
-        old_focal_unit = cam.data.lens_unit,
+        old_camera_name = camera_object.name,
+        old_shift_x = camera_data.shift_x,
+        old_shift_y = camera_data.shift_y,
+        old_aperture_fstop = camera_data.dof.aperture_fstop,
+        old_focal_length = camera_data.lens,
+        old_focal_unit = camera_data.lens_unit,
         old_use_border = render.use_border,
         old_use_crop_to_border = render.use_crop_to_border,
         old_border_min_x = render.border_min_x,
@@ -47,10 +49,10 @@ def save_render_settings(context: Context):
     )
 
 
-def restore_render_settings(context: Context, settings: SavedRenderSettings):
-    scene = context.scene
-    cam = scene.camera
-    render = scene.render
+def restore_render_settings(context: Context, settings: SavedRenderSettings, camera_object: Object):
+    scene: Scene = context.scene
+    render: RenderSettings = scene.render
+    camera_data: Camera = camera_object.data
 
     render.filepath = settings.old_file_path
     render.image_settings.file_format = settings.old_file_format
@@ -63,8 +65,9 @@ def restore_render_settings(context: Context, settings: SavedRenderSettings):
     render.border_min_y = settings.old_border_min_y
     render.border_max_x = settings.old_border_max_x
     render.border_max_y = settings.old_border_max_y
-    cam.data.shift_x = settings.old_shift_x
-    cam.data.shift_y = settings.old_shift_y
-    cam.data.dof.aperture_fstop = settings.old_aperture_fstop
-    cam.data.lens_unit = settings.old_focal_unit
-    cam.data.lens = settings.old_focal_length
+    camera_object.name = settings.old_camera_name
+    camera_data.shift_x = settings.old_shift_x
+    camera_data.shift_y = settings.old_shift_y
+    camera_data.dof.aperture_fstop = settings.old_aperture_fstop
+    camera_data.lens_unit = settings.old_focal_unit
+    camera_data.lens = settings.old_focal_length

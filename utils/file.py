@@ -1,8 +1,11 @@
 import os
 
-def get_tile_filepath(col: int, row: int) -> str:
+def get_tile_suffix(col: int, row: int) -> str:
+    return f"_R{(row + 1):02}_C{(col + 1):02}"
+
+def get_tile_filepath(tile_suffix: str) -> str:
     file_extension = get_file_ext('OPEN_EXR')
-    filepath = os.path.join("//PartRenders", f"Part_R{(row + 1):02}_C{(col + 1):02}{file_extension}")
+    filepath = os.path.join("//PartRenders", f"Part{tile_suffix}{file_extension}")
     return filepath
 
 
