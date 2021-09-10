@@ -12,14 +12,14 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 bl_info = {
-    "name" : "Super Resolution Render (SRR)",
-    "author" : "Kevin Lorengel, Chris Bond (Kamikaze)",
-    "description" : "Render in extreme resolution!",
-    "blender" : (2, 92, 0),
-    "version" : (1, 2, 1),
-    "location" : "Properties > Output > SuperResRender",
-    "warning" : "",
-    "category" : "Render"
+    "name": "Super Resolution Render (SRR)",
+    "author": "Kevin Lorengel, Chris Bond (Kamikaze)",
+    "description": "Render in extreme resolution!",
+    "blender": (2, 92, 0),
+    "version": (1, 2, 2),
+    "location": "Properties > Output > SuperResRender",
+    "warning": "",
+    "category": "Render"
 }
 
 import bpy
@@ -40,43 +40,44 @@ from .SRR_Panel import (
 )
 from . import addon_updater_ops
 
+
 class DemoPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
     # addon updater preferences
 
-    auto_check_update = bpy.props.BoolProperty(
+    auto_check_update: bpy.props.BoolProperty(
         name="Auto-check for Update",
         description="If enabled, auto-check for updates using an interval",
         default=True,
-        )
-    updater_intrval_months = bpy.props.IntProperty(
+    )
+    updater_intrval_months: bpy.props.IntProperty(
         name='Months',
         description="Number of months between checking for updates",
         default=0,
-        min=0
-        )
-    updater_intrval_days = bpy.props.IntProperty(
+        min=0,
+    )
+    updater_intrval_days: bpy.props.IntProperty(
         name='Days',
         description="Number of days between checking for updates",
         default=7,
         min=0,
-        max=31
-        )
-    updater_intrval_hours = bpy.props.IntProperty(
+        max=31,
+    )
+    updater_intrval_hours: bpy.props.IntProperty(
         name='Hours',
         description="Number of hours between checking for updates",
         default=0,
         min=0,
-        max=23
-        )
-    updater_intrval_minutes = bpy.props.IntProperty(
+        max=23,
+    )
+    updater_intrval_minutes: bpy.props.IntProperty(
         name='Minutes',
         description="Number of minutes between checking for updates",
         default=0,
         min=0,
-        max=59
-        )
+        max=59,
+    )
 
     def draw(self, context):
         layout = self.layout
@@ -98,8 +99,10 @@ class DemoPreferences(bpy.types.AddonPreferences):
         # col = mainrow.column()
         # col.scale_y = 2
         # col.operator("wm.url_open","Open webpage ").url=addon_updater_ops.updater.website
-        
+
+
 ### Addon Registration
+
 
 @persistent
 def load_handler(dummy):
@@ -110,15 +113,17 @@ def load_handler(dummy):
     except:
         pass
 
+
 classes = (
-     SRR_RenderStatus,
-     SRR_Settings,
-     SRR_OT_Render,
-     SRR_OT_StopRender,
-     SRR_OT_Merge,
-     SRR_UI_PT_Panel,
-     DemoPreferences
+    SRR_RenderStatus,
+    SRR_Settings,
+    SRR_OT_Render,
+    SRR_OT_StopRender,
+    SRR_OT_Merge,
+    SRR_UI_PT_Panel,
+    DemoPreferences,
 )
+
 
 def register():
     # addon updater code and configurations
@@ -128,12 +133,14 @@ def register():
 
     # register the example panel, to show updater buttons
     for cls in classes:
-        addon_updater_ops.make_annotations(cls) # to avoid blender 2.8 warnings
+        # to avoid blender 2.8 warnings
+        addon_updater_ops.make_annotations(cls)
         bpy.utils.register_class(cls)
 
     bpy.types.Scene.srr_settings = PointerProperty(type=SRR_Settings)
 
     bpy.app.handlers.load_post.append(load_handler)
+
 
 def unregister():
     del bpy.types.Scene.srr_settings
@@ -147,4 +154,3 @@ def unregister():
 
 if __name__ == "__main__":
     register()
-    
