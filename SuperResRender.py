@@ -61,6 +61,11 @@ class SRR_OT_Render(Operator):
         # print("\n\n--------------")
         # print("Preparing tiles...")
         self.tiles = generate_tiles(context, self.saved_settings)
+        if settings.start_tile > 1:
+            self.tiles = self.tiles[settings.start_tile - 1:]
+        if not self.tiles:
+            ShowMessageBox("No tiles to render.")
+            return {'CANCELLED'}
 
         status.tiles_total = len(self.tiles)
         status.tiles_done = 0

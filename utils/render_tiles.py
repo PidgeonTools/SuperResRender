@@ -71,8 +71,6 @@ def generate_tiles(context: Context, saved_settings: SavedRenderSettings) -> Lis
 
     render = scene.render
     settings: SRR_Settings = scene.srr_settings
-        
-    skip_tiles = settings.start_tile - 1
 
     # Get image dimensions
     res_x = render.resolution_x
@@ -183,18 +181,15 @@ def generate_tiles(context: Context, saved_settings: SavedRenderSettings) -> Lis
                 )
 
             # Render
-            if skip_tiles <= 0:
-                filepath = get_tile_filepath(current_col, current_row)
-                tile = RenderTile(
-                    render_method = settings.render_method,
-                    camshift_settings = camshift_settings,
-                    border_settings = border_settings,
-                    filepath = filepath,
-                    file_format = 'OPEN_EXR',
-                )
+            filepath = get_tile_filepath(current_col, current_row)
+            tile = RenderTile(
+                render_method = settings.render_method,
+                camshift_settings = camshift_settings,
+                border_settings = border_settings,
+                filepath = filepath,
+                file_format = 'OPEN_EXR',
+            )
 
-                tiles.append(tile)
-            else:
-                skip_tiles -= 1
+            tiles.append(tile)
 
     return tiles
