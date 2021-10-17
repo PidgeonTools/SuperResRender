@@ -7,7 +7,7 @@ from math import ceil
 from typing import List, NamedTuple
 
 from ..SRR_Settings import SRR_Settings
-from .file import get_file_ext, get_tile_filepath
+from .file import get_file_ext, get_tile_filepath, get_tile_suffix
 
 
 class MergeTile(NamedTuple):
@@ -61,7 +61,8 @@ def generate_tiles_for_merge(context: Context) -> List[MergeTile]:
             # Set horizontal resolution
             tile_x = last_tile_x if is_last_col else max_tile_x
 
-            filepath = get_tile_filepath(current_col, current_row)
+            tile_suffix = get_tile_suffix(current_col, current_row)
+            filepath = get_tile_filepath(tile_suffix)
             tile = MergeTile(
                 dimensions = (tile_x, tile_y),
                 offset = (offset_x, offset_y),
