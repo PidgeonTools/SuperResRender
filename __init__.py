@@ -19,6 +19,8 @@ bl_info = {
     "version": (1, 3, 1),
     "location": "Properties > Output > SuperResRender",
     "warning": "",
+    "endpoint_url": "https://raw.githubusercontent.com/PidgeonTools/SAM-Endpoints/main/SuperResRender.json",
+    "tracker_url": "https://github.com/PidgeonTools/SuperResRender/issues",
     "category": "Render"
 }
 
